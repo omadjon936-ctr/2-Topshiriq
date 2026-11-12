@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AR Luxury Interyer Dizayni Ilovasi</title>
+  <!-- A-Frame 1.5.0 kutubxonasi -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 14px;
+      padding-bottom: 72px;
+      box-sizing: border-box;
+    }
+    .top-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .brand-badge {
+      background: linear-gradient(135deg, #d97706, #b45309);
+      color: #fff;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .status-bar {
+      background: rgba(15, 23, 42, 0.85);
+      color: #f8fafc;
+      padding: 10px 18px;
+      border-radius: 14px;
+      text-align: center;
+      font-size: 13px;
+      pointer-events: auto;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      max-width: 520px;
+    }
+    .controls-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: auto;
+      background: rgba(15, 23, 42, 0.78);
+      padding: 12px;
+      border-radius: 18px;
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      max-width: 600px;
+      margin: 0 auto;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .button-row {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      background: rgba(51, 65, 85, 0.9);
+      color: #f1f5f9;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn:hover {
+      background: rgba(71, 85, 105, 1);
+      transform: translateY(-1px);
+    }
+    .btn.active {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      border-color: #93c5fd;
+      box-shadow: 0 0 12px rgba(37, 99, 235, 0.5);
+    }
+    .btn-tool {
+      background: rgba(15, 118, 110, 0.9);
+      font-size: 12px;
+      padding: 6px 10px;
+    }
+    .btn-warning {
+      background: rgba(217, 119, 6, 0.9);
+    }
+    .btn-danger {
+      background: rgba(220, 38, 38, 0.9);
+    }
+  </style>
+
+  <!-- BARCHA JAVASCRIPT KODLAR SHU YERNING O'ZIDA -->
+  <script>
+    window.currentFurnitureType = 'chair';
+    window.selectedEntity = null;
+    const MAX_OBJECTS = 15;
+
+    // Mebel turini tanlash
+    window.selectFurniture = function(type) {
+      window.currentFurnitureType = type;
+      document.querySelectorAll('.button-row .btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = document.getElementById('btn-' + type);
+      if (activeBtn) activeBtn.classList.add('active');
+      
+      const names = {
+        chair: 'Baxmal Kreslo',
+        sofa: 'Hashamatli Divan',
+        table: 'Jurnal Stoli',
+        lamp: 'Dekor Chiroq/Gul'
+      };
+      updateStatus(`Tanlandi: ${names[type]}. Joylashtirish uchun polga (gilamga) bosing.`);
+    };
+
+    // Tanlangan mebelni tugma orqali burish (Rotate)
+    window.rotateSelected = function(deg) {
+      if (!window.selectedEntity) {
+        updateStatus("Avval mebel ustiga bosib uni tanlang!");
+        return;
+      }
+      const rot = window.selectedEntity.getAttribute('rotation');
+      window.selectedEntity.setAttribute('rotation', {
+        x: rot.x,
+        y: rot.y + deg,
+        z: rot.z
+      });
+      updateStatus(`Mebel ${deg > 0 ? "o'ngga" : "chapga"} burildi.`);
+    };
+
+    // Tanlangan mebelni tugma orqali kattalashtirish/kichraytirish (Scale)
+    window.scaleSelected = function(factor) {
+      if (!window.selectedEntity) {
+        updateStatus("Avval mebel ustiga bosib uni tanlang!");
+        return;
+      }
+      const currentScale = window.selectedEntity.getAttribute('scale');
+      let newScale = currentScale.x * factor;
+      newScale = Math.max(0.4, Math.min(2.5, newScale));
+      window.selectedEntity.setAttribute('scale', { x: newScale, y: newScale, z: newScale });
+      updateStatus(`Mebel o'lchami o'zgartirildi (${Math.round(newScale * 100)}%).`);
+    };
+
+    // Tanlangan obyektni o'chirish
+    window.deleteSelected = function() {
+      if (window.selectedEntity && window.selectedEntity.parentNode) {
+        window.selectedEntity.parentNode.removeChild(window.selectedEntity);
+        window.selectedEntity = null;
+        updateStatus("Tanlangan mebel o'chirildi.");
+      } else {
+        updateStatus("O'chirish uchun avval mebel ustiga bosing!");
+      }
+    };
+
+    // Sahnani tozalash
+    window.clearScene = function() {
+      const container = document.getElementById('furniture-container');
+      while (container && container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+      window.selectedEntity = null;
+      updateStatus("Mehmonxona sahnasi tozalandi. Polga bosib yangi mebel qo'shing!");
+    };
+
+    function updateStatus(text) {
+      const statusEl = document.getElementById('status-text');
+      if (statusEl) statusEl.innerText = text;
+    }
+
+    // 3D Mebel va glTF/GLB modellar generatori
+    function createFurnitureMesh(type) {
+      const wrapper = document.createElement('a-entity');
+
+      if (type === 'chair') {
+        wrapper.innerHTML = `
+          <a-entity gltf-model="url(https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/SheenChair/glTF-Binary/SheenChair.glb)" scale="1 1 1"></a-entity>
+          <a-cylinder class="placeable" position="0 0.28 0" radius="0.34" height="0.12" color="#b45309" material="roughness: 0.5"></a-cylinder>
+          <a-cylinder class="placeable" position="0 0.52 -0.18" rotation="12 0 0" radius="0.32" height="0.45" color="#d97706" material="roughness: 0.5"></a-cylinder>
+          <a-cylinder position="-0.22 0.14 -0.18" radius="0.025" height="0.28" color="#fbbf24" material="metalness: 0.8; roughness: 0.2"></a-cylinder>
+          <a-cylinder position="0.22 0.14 -0.18" radius="0.025" height="0.28" color="#fbbf24" material="metalness: 0.8; roughness: 0.2"></a-cylinder>
+          <a-cylinder position="-0.22 0.14 0.18" radius="0.025" height="0.28" color="#fbbf24" material="metalness: 0.8; roughness: 0.2"></a-cylinder>
+          <a-cylinder position="0.22 0.14 0.18" radius="0.025" height="0.28" color="#fbbf24" material="metalness: 0.8; roughness: 0.2"></a-cylinder>
+        `;
+      } else if (type === 'sofa') {
+        wrapper.innerHTML = `
+          <a-box class="placeable" position="0 0.22 0" width="1.8" height="0.28" depth="0.8" color="#1e3a8a" material="roughness: 0.6"></a-box>
+          <a-box class="placeable" position="0 0.58 -0.32" width="1.8" height="0.52" depth="0.18" color="#1d4ed8" material="roughness: 0.5"></a-box>
+          <a-box class="placeable" position="-0.85 0.42 0" width="0.16" height="0.48" depth="0.82" color="#1e40af" material="roughness: 0.5"></a-box>
+          <a-box class="placeable" position="0.85 0.42 0" width="0.16" height="0.48" depth="0.82" color="#1e40af" material="roughness: 0.5"></a-box>
+          <a-box position="-0.55 0.48 -0.15" rotation="0 0 10" width="0.32" height="0.32" depth="0.1" color="#fbbf24"></a-box>
+          <a-box position="0.55 0.48 -0.15" rotation="0 0 -10" width="0.32" height="0.32" depth="0.1" color="#fbbf24"></a-box>
+          <a-cylinder position="-0.8 0.05 0.32" radius="0.03" height="0.1" color="#fbbf24" material="metalness: 0.8"></a-cylinder>
+          <a-cylinder position="0.8 0.05 0.32" radius="0.03" height="0.1" color="#fbbf24" material="metalness: 0.8"></a-cylinder>
+        `;
+      } else if (type === 'table') {
+        wrapper.innerHTML = `
+          <a-cylinder class="placeable" position="0 0.42 0" radius="0.55" height="0.05" color="#f8fafc" material="roughness: 0.15; metalness: 0.1"></a-cylinder>
+          <a-torus position="0 0.42 0" rotation="90 0 0" radius="0.55" radius-tubular="0.018" color="#d97706" material="metalness: 0.8"></a-torus>
+          <a-torus position="0 0.06 0" rotation="90 0 0" radius="0.45" radius-tubular="0.018" color="#d97706" material="metalness: 0.8"></a-torus>
+          <a-cylinder position="-0.4 0.24 0" radius="0.02" height="0.36" color="#d97706" material="metalness: 0.8"></a-cylinder>
+          <a-cylinder position="0.4 0.24 0" radius="0.02" height="0.36" color="#d97706" material="metalness: 0.8"></a-cylinder>
+          <a-cylinder position="0 0.24 -0.4" radius="0.02" height="0.36" color="#d97706" material="metalness: 0.8"></a-cylinder>
+          <a-cylinder position="0 0.24 0.4" radius="0.02" height="0.36" color="#d97706" material="metalness: 0.8"></a-cylinder>
+        `;
+      } else if (type === 'lamp') {
+        wrapper.innerHTML = `
+          <a-cylinder class="placeable" position="0 0.22 0" radius="0.2" height="0.44" color="#ffffff" material="roughness: 0.3"></a-cylinder>
+          <a-cylinder position="0 0.43 0" radius="0.18" height="0.04" color="#422006"></a-cylinder>
+          <a-cylinder position="0 0.65 0" radius="0.035" height="0.5" color="#5c4033"></a-cylinder>
+          <a-sphere class="placeable" position="0 0.95 0" radius="0.28" color="#15803d" material="roughness: 0.7"></a-sphere>
+          <a-sphere position="-0.15 1.1 0.1" radius="0.2" color="#16a34a" material="roughness: 0.7"></a-sphere>
+          <a-sphere position="0.15 1.08 -0.08" radius="0.22" color="#22c55e" material="roughness: 0.7"></a-sphere>
+        `;
+      }
+      return wrapper;
+    }
+
+    // WebXR Hit-Test va Interyer Boshqaruvi
+    AFRAME.registerComponent('ar-hit-test-manager', {
+      init: function () {
+        const sceneEl = this.el;
+        this.reticle = document.getElementById('reticle');
+        this.container = document.getElementById('furniture-container');
+        this.demoEnv = document.getElementById('demo-environment');
+        this.xrHitTestSource = null;
+        this.viewerSpace = null;
+        this.refSpace = null;
+
+        const overlay = document.getElementById('overlay');
+        if (overlay) {
+          overlay.addEventListener('beforexrselect', (ev) => {
+            ev.preventDefault();
+          });
+        }
+
+        // Sahna ochilganda mehmonxonada dastlabki mebellar to'plamini ko'rsatish
+        setTimeout(() => {
+          this.placeModel({ x: 0, y: 0.02, z: -1.5 }, 'sofa', 0);
+          this.placeModel({ x: 0, y: 0.02, z: -0.4 }, 'table', 0);
+          this.placeModel({ x: -1.3, y: 0.02, z: -0.6 }, 'chair', 45);
+          this.placeModel({ x: 1.5, y: 0.02, z: -1.6 }, 'lamp', 0);
+          updateStatus("Mehmonxona tayyor! Polga bosib yangi mebel qo'shing yoki mebelni tanlab boshqaring.");
+        }, 300);
+
+        // Pol yoki gilamga bosilganda yangi mebel joylashtirish
+        const floors = document.querySelectorAll('.floor-plane');
+        floors.forEach(floor => {
+          floor.addEventListener('click', (evt) => {
+            if (sceneEl.is('ar-mode')) return;
+            const point = evt.detail.intersection.point;
+            this.reticle.setAttribute('position', { x: point.x, y: 0.03, z: point.z });
+            this.placeModel({ x: point.x, y: 0.02, z: point.z }, window.currentFurnitureType, 0);
+          });
+        });
+
+        // AR sessiya boshlanganda (Telefonda Kamera yoqilganda)
+        sceneEl.renderer.xr.addEventListener('sessionstart', async () => {
+          if (this.demoEnv) this.demoEnv.setAttribute('visible', false);
+          window.clearScene();
+          this.reticle.setAttribute('visible', false);
+          const session = sceneEl.renderer.xr.getSession();
+          updateStatus("AR Kamera yoqildi! Telefonni sekin xonangiz poliga qarating...");
+
+          try {
+            this.viewerSpace = await session.requestReferenceSpace('viewer');
+            this.refSpace = sceneEl.renderer.xr.getReferenceSpace();
+            this.xrHitTestSource = await session.requestHitTestSource({ space: this.viewerSpace });
+          } catch (err) {
+            console.warn('Hit-test xatosi:', err);
+          }
+
+          session.addEventListener('select', () => {
+            if (!this.reticle.getAttribute('visible')) return;
+            const pos = this.reticle.getAttribute('position');
+            this.placeModel(pos, window.currentFurnitureType, 0);
+          });
+        });
+
+        // AR sessiya tugaganda
+        sceneEl.renderer.xr.addEventListener('sessionend', () => {
+          this.xrHitTestSource = null;
+          this.viewerSpace = null;
+          if (this.demoEnv) this.demoEnv.setAttribute('visible', true);
+          this.reticle.setAttribute('visible', true);
+          this.reticle.setAttribute('position', '0 0.03 -0.5');
+          updateStatus("AR sessiyasi yakunlandi.");
+        });
+      },
+
+      placeModel: function (pos, type, rotationY = 0) {
+        if (this.container.children.length >= MAX_OBJECTS) {
+          updateStatus(`Maksimal ${MAX_OBJECTS} ta mebel joylashtirish mumkin!`);
+          return;
+        }
+
+        const entity = createFurnitureMesh(type || window.currentFurnitureType);
+        entity.setAttribute('position', { x: pos.x, y: pos.y, z: pos.z });
+        entity.setAttribute('rotation', { x: 0, y: rotationY, z: 0 });
+        entity.setAttribute('class', 'placeable');
+        entity.setAttribute('scale', '1 1 1');
+
+        entity.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.selectedEntity = entity;
+          updateStatus("Mebel tanlandi! Pastdagi tugmalar yoki barmoq orqali buring va kattalashtiring.");
+        });
+
+        this.container.appendChild(entity);
+        window.selectedEntity = entity;
+      },
+
+      tick: function () {
+        const sceneEl = this.el;
+        if (!sceneEl.is('ar-mode')) return;
+
+        const frame = sceneEl.frame;
+        if (!frame) return;
+
+        if (this.xrHitTestSource && this.refSpace) {
+          const hitTestResults = frame.getHitTestResults(this.xrHitTestSource);
+          if (hitTestResults.length > 0) {
+            const pose = hitTestResults[0].getPose(this.refSpace);
+            if (pose) {
+              this.reticle.setAttribute('visible', true);
+              this.reticle.setAttribute('position', pose.transform.position);
+            }
+          } else {
+            this.reticle.setAttribute('visible', false);
+          }
+        }
+      }
+    });
+
+    // 1 barmoqda burish (rotate) va 2 barmoqda kattalashtirish (scale)
+    AFRAME.registerComponent('gesture-handler', {
+      init: function () {
+        this.isTouching = false;
+        this.startX = 0;
+        this.initialPinchDistance = 0;
+
+        window.addEventListener('touchstart', (e) => {
+          if (e.target.closest('.btn')) return;
+          if (e.touches.length === 1) {
+            this.isTouching = true;
+            this.startX = e.touches[0].pageX;
+          } else if (e.touches.length === 2) {
+            this.isTouching = false;
+            this.initialPinchDistance = this.getDistance(e.touches[0], e.touches[1]);
+          }
+        });
+
+        window.addEventListener('touchmove', (e) => {
+          if (!window.selectedEntity) return;
+          if (e.target.closest('.btn')) return;
+
+          if (e.touches.length === 1 && this.isTouching) {
+            const deltaX = e.touches[0].pageX - this.startX;
+            this.startX = e.touches[0].pageX;
+            const currentRotation = window.selectedEntity.getAttribute('rotation');
+            window.selectedEntity.setAttribute('rotation', {
+              x: currentRotation.x,
+              y: currentRotation.y + deltaX * 0.6,
+              z: currentRotation.z
+            });
+          } else if (e.touches.length === 2 && this.initialPinchDistance > 0) {
+            const currentDistance = this.getDistance(e.touches[0], e.touches[1]);
+            const scaleFactor = currentDistance / this.initialPinchDistance;
+            this.initialPinchDistance = currentDistance;
+
+            const currentScale = window.selectedEntity.getAttribute('scale');
+            let newScale = currentScale.x * scaleFactor;
+            newScale = Math.max(0.4, Math.min(2.5, newScale));
+
+            window.selectedEntity.setAttribute('scale', {
+              x: newScale,
+              y: newScale,
+              z: newScale
+            });
+          }
+        });
+
+        window.addEventListener('touchend', () => {
+          this.isTouching = false;
+          this.initialPinchDistance = 0;
+        });
+      },
+
+      getDistance: function (touch1, touch2) {
+        const dx = touch1.pageX - touch2.pageX;
+        const dy = touch1.pageY - touch2.pageY;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+    });
+  </script>
+</head>
+<body>
+
+  <!-- O'zbek tilidagi zamonaviy boshqaruv interfeysi -->
+  <div id="overlay">
+    <div class="top-header">
+      <div class="brand-badge">✨ Luxury Hotel & Interior AR</div>
+      <div class="status-bar" id="status-text">
+        Mehmonxona poliga (oltin halqaga) bosib mebel joylashtiring yoki "AR" tugmasini bosing!
+      </div>
+    </div>
+
+    <div class="controls-container">
+      <div class="button-row">
+        <button class="btn active" id="btn-chair" onclick="selectFurniture('chair')">🪑 Baxmal Kreslo</button>
+        <button class="btn" id="btn-sofa" onclick="selectFurniture('sofa')">🛋️ Hashamatli Divan</button>
+        <button class="btn" id="btn-table" onclick="selectFurniture('table')">☕ Jurnal Stoli</button>
+        <button class="btn" id="btn-lamp" onclick="selectFurniture('lamp')">🪴 Dekor Chiroq/Gul</button>
+      </div>
+      <div class="button-row">
+        <button class="btn btn-tool" onclick="rotateSelected(-30)">↺ Chapga burish</button>
+        <button class="btn btn-tool" onclick="rotateSelected(30)">↻ O'ngga burish</button>
+        <button class="btn btn-tool" onclick="scaleSelected(1.15)">➕ Kattalashtirish</button>
+        <button class="btn btn-tool" onclick="scaleSelected(0.85)">➖ Kichraytirish</button>
+      </div>
+      <div class="button-row">
+        <button class="btn btn-warning" onclick="deleteSelected()">🗑️ Tanlanganni o'chirish</button>
+        <button class="btn btn-danger" onclick="clearScene()">🧹 Sahnani tozalash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- A-Frame 3D va WebXR Sahnasi -->
+  <a-scene
+    webxr="requiredFeatures: hit-test,local-floor; optionalFeatures: dom-overlay,light-estimation; overlayElement: #overlay"
+    ar-hit-test-manager
+    gesture-handler
+    shadow="type: pcfsoft"
+    renderer="colorManagement: true; exposure: 1.1; toneMapping: ACESFilmic">
+
+    <!-- Yoritish tizimi -->
+    <a-light id="ambient-light" type="ambient" color="#fff8f0" intensity="0.65"></a-light>
+    <a-light id="dir-light" type="directional" color="#ffffff" intensity="0.85" position="3 6 4" castShadow="true"></a-light>
+    <a-light type="point" color="#fbbf24" intensity="0.6" distance="10" position="0 3.6 0"></a-light>
+
+    <!-- HAQIQIY MEHMONXONA INTERYERI -->
+    <a-entity id="demo-environment">
+      <a-sky color="#0f172a"></a-sky>
+      <a-plane id="demo-floor" class="floor-plane" rotation="-90 0 0" width="9" height="8" color="#78350f" material="roughness: 0.35; metalness: 0.05" shadow="receive: true"></a-plane>
+      
+      <!-- Markaziy Gilam -->
+      <a-box class="floor-plane" position="0 0.01 -0.6" width="4.4" height="0.02" depth="3.2" color="#e2e8f0" material="roughness: 0.9"></a-box>
+      <a-box class="floor-plane" position="0 0.015 -0.6" width="4.0" height="0.02" depth="2.8" color="#1e293b" material="roughness: 0.85"></a-box>
+      <a-box class="floor-plane" position="0 0.02 -0.6" width="3.6" height="0.02" depth="2.4" color="#cbd5e1" material="roughness: 0.9"></a-box>
+
+      <!-- Shift va Qandil -->
+      <a-plane rotation="90 0 0" position="0 4 0" width="9" height="8" color="#f8fafc"></a-plane>
+      <a-cylinder position="0 3.85 0" radius="0.03" height="0.3" color="#d97706"></a-cylinder>
+      <a-torus position="0 3.65 0" rotation="90 0 0" radius="0.45" radius-tubular="0.03" color="#fbbf24" material="shader: flat"></a-torus>
+
+      <!-- Orqa devor va Kartina -->
+      <a-box position="0 2 -4" width="9" height="4" depth="0.15" color="#f1f5f9" material="roughness: 0.7"></a-box>
+      <a-box position="0 2 -3.9" width="4.6" height="4" depth="0.08" color="#334155" material="roughness: 0.5"></a-box>
+      <a-box position="0 0.08 -3.88" width="9" height="0.16" depth="0.06" color="#ffffff"></a-box>
+      <a-box position="0 2.35 -3.84" width="2.2" height="1.2" depth="0.04" color="#d97706" material="metalness: 0.6; roughness: 0.3"></a-box>
+      <a-box position="0 2.35 -3.81" width="2.05" height="1.05" depth="0.03" color="#0284c7"></a-box>
+      <a-sphere position="-0.4 2.45 -3.79" radius="0.18" color="#fbbf24" material="shader: flat"></a-sphere>
+
+      <!-- TV Tumba -->
+      <a-box position="0 0.35 -3.4" width="2.8" height="0.45" depth="0.55" color="#1e1b4b" material="roughness: 0.3"></a-box>
+      <a-box position="0 0.59 -3.4" width="2.9" height="0.04" depth="0.6" color="#d97706" material="metalness: 0.5"></a-box>
+
+      <!-- Chap devor va Panoramali Deraza -->
+      <a-box position="-4.5 2 0" rotation="0 90 0" width="8" height="4" depth="0.15" color="#e2e8f0"></a-box>
+      <a-box position="-4.4 2 -0.5" rotation="0 90 0" width="4.2" height="2.6" depth="0.06" color="#0f172a"></a-box>
+      <a-plane position="-4.35 2 -0.5" rotation="0 90 0" width="4.0" height="2.4" color="#38bdf8" material="shader: flat; opacity: 0.35"></a-plane>
+
+      <!-- O'ng devor -->
+      <a-box position="4.5 2 0" rotation="0 -90 0" width="8" height="4" depth="0.15" color="#e2e8f0"></a-box>
+    </a-entity>
+
+    <!-- Kamera -->
+    <a-camera position="0 1.65 2.6" look-controls wasd-controls cursor="rayOrigin: mouse; fuse: false" raycaster="objects: .placeable, .floor-plane"></a-camera>
+
+    <!-- Tekislik belgisi (Reticle) -->
+    <a-entity id="reticle" position="0 0.03 -0.5" visible="true">
+      <a-ring rotation="-90 0 0" radius-inner="0.18" radius-outer="0.24" color="#fbbf24" material="shader: flat; opacity: 0.95"></a-ring>
+      <a-circle rotation="-90 0 0" radius="0.05" color="#3b82f6" material="shader: flat"></a-circle>
+    </a-entity>
+
+    <!-- Joylashtirilgan mebellar konteyneri -->
+    <a-entity id="furniture-container"></a-entity>
+
+  </a-scene>
+
+</body>
+</html>
